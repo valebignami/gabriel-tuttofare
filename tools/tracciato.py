@@ -36,9 +36,9 @@ ELENCO = ("Idraulica, caldaie e condizionatori",
           "Muratura e cartongesso",
           "Piastrelle e pavimenti",
           "Riparazioni e tinteggiatura")
-STORIA = ("Vent'anni di cantiere: muratore, capo",
-          "squadra, poi idraulico. Chi chiama tre",
-          "ditte diverse, di solito, le fa litigare.")
+# Niente frecciate ai concorrenti su uno stampato che gira per le case:
+# la credibilita' la fa il mestiere, non il paragone.
+STORIA = "Vent'anni di cantiere: muratore, capo squadra, poi idraulico."
 PROMESSA = "Sopralluogo e preventivo gratuiti"
 TEL    = "320 417 7267"
 ZONA   = "Milano e provincia"

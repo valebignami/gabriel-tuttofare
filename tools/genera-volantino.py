@@ -7,22 +7,25 @@ e con due soli tagli dritti. Escono due file:
   volantino-a6-stampa.pdf        il singolo, con crocini, per la tipografia
   volantino-a4-4-per-foglio.pdf  il foglio A4 gia' impaginato con quattro
 
-Scelta che decide tutto il resto: il fondo e' bianco e nessun colore arriva
-al bordo. Non e' pigrizia, e' quello che rende il volantino stampabile
-davvero. Una stampante da casa non arriva agli ultimi millimetri del foglio:
-un fondo pieno uscirebbe con una cornice bianca storta e un taglio da
-indovinare. Cosi' invece il margine che la stampante non copre e' carta
-bianca comunque, il taglio puo' sbagliare di un paio di millimetri senza
-che si veda, e l'inchiostro costa un quarto. Il colore sta dove serve:
-la fascia scura del titolo e l'arancio, tutti e due dentro i margini.
+Le fotografie sono quelle del sito, ritagliate qui al formato che serve:
+una fascia larga in alto con le mani al lavoro, e tre miniature che fanno
+vedere i mestieri invece di limitarsi a elencarli.
+
+Il fondo resta bianco e niente arriva al bordo del foglio, fotografie
+comprese. Una stampante da casa non copre gli ultimi millimetri: un'immagine
+al vivo uscirebbe con una cornice bianca storta e un taglio da indovinare.
+Cosi' invece il margine non stampabile e' carta bianca comunque, e il taglio
+puo' sbagliare di due millimetri senza che si veda.
 """
 
 import os, sys
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.units import mm
-from reportlab.lib.colors import HexColor, Color
+from reportlab.lib.colors import Color
+from reportlab.lib.utils import ImageReader
+from PIL import Image
 
-from tracciato import (ANTRACITE, ARANCIO, CHIARO, MATITA, FILETTO, CAP_BARLOW,
+from tracciato import (ANTRACITE, ARANCIO, CHIARO, MATITA, CAP_BARLOW,
                        NOME, RUOLO, CLAIM, ELENCO, STORIA, PROMESSA, TEL, ZONA,
                        carica_font, azzera, reg, larghezza, verifica, BOX, CORPI,
                        tracking, marchio, qr_vettoriale, crocini, didascalia)
@@ -30,18 +33,45 @@ from tracciato import (ANTRACITE, ARANCIO, CHIARO, MATITA, FILETTO, CAP_BARLOW,
 CARTELLA = sys.argv[1] if len(sys.argv) > 1 else "biglietto"
 carica_font()
 
-# ---------------------------------------------------------------- geometria
 A6_W, A6_H = 105 * mm, 148.5 * mm
 A4_W, A4_H = 210 * mm, 297 * mm
 MARGINE = 9 * mm
 STACCO = 4 * mm            # spazio per i crocini attorno al singolo A6
-MIN_VOLANTINO = 8.0        # su un volantino si puo' stare piu' larghi che su un biglietto
+MIN_VOLANTINO = 8.0        # su un volantino si sta piu' larghi che su un biglietto
+DPI_STAMPA = 300
+
+FASCIA = "img/cta.jpg"
+MINIATURE = ("img/serv-idraulica.jpg", "img/serv-bagno.jpg", "img/serv-piastrelle.jpg")
+
+_cache = {}
+
+
+def foto(c, percorso, x, y, w, h):
+    """Ritaglia al centro sul formato richiesto e disegna a 300 dpi.
+
+    Il ritaglio si fa qui e non nel PDF: chiedere a reportlab di adattare
+    l'immagine la schiaccerebbe, e le persone storte si notano subito.
+    """
+    chiave = (percorso, round(w, 2), round(h, 2))
+    if chiave not in _cache:
+        im = Image.open(percorso)
+        iw, ih = im.size
+        voluto = w / float(h)
+        if iw / float(ih) > voluto:                 # troppo larga: taglio i fianchi
+            nuova = int(round(ih * voluto))
+            im = im.crop(((iw - nuova) // 2, 0, (iw - nuova) // 2 + nuova, ih))
+        else:                                       # troppo alta: taglio sopra e sotto
+            nuova = int(round(iw / voluto))
+            im = im.crop((0, (ih - nuova) // 2, iw, (ih - nuova) // 2 + nuova))
+        px = int(round(w / mm / 25.4 * DPI_STAMPA))
+        _cache[chiave] = ImageReader(im.resize((px, int(round(px / voluto))), Image.LANCZOS))
+    c.drawImage(_cache[chiave], x, y, w, h)
 
 
 def disegna(c, ox, oy, registra=False):
     """Il volantino, con l'angolo in basso a sinistra in (ox, oy).
 
-    Registra gli ingombri una volta sola: le quattro copie del foglio A4
+    Registra gli ingombri una volta sola: le quattro copie sul foglio A4
     sono lo stesso disegno, verificarlo quattro volte non aggiunge niente.
     """
     def R_(nome, x0, y0, x1, y1):
@@ -50,101 +80,101 @@ def disegna(c, ox, oy, registra=False):
 
     L, R = ox + MARGINE, ox + A6_W - MARGINE
     B, T = oy + MARGINE, oy + A6_H - MARGINE
+    larg = R - L
 
-    # --- la fascia del titolo: scura, ma dentro i margini. Da' il colpo
-    # d'occhio senza chiedere alla stampante di arrivare al bordo.
-    fascia = 26.0 * mm
-    fy = T - fascia
+    # --- la fascia fotografica: le mani al lavoro, non un fondo colorato.
+    # E' la prima cosa che si vede e dice il mestiere senza una parola.
+    h_foto = 28 * mm
+    foto(c, FASCIA, L, T - h_foto, larg, h_foto)
+
+    # --- sotto, la fascia scura con il marchio: aggancia la foto al marchio
+    h_bar = 16 * mm
+    by = T - h_foto - h_bar
     c.setFillColor(ANTRACITE)
-    c.rect(L, fy, R - L, fascia, stroke=0, fill=1)
-    R_("fascia", L, fy, R, T)
+    c.rect(L, by, larg, h_bar, stroke=0, fill=1)
+    # foto e fascia sono attaccate di proposito: sono una testata sola, non
+    # due blocchi da distanziare
+    R_("testata", L, by, R, T)
 
-    s = 12.0 * mm
-    marchio(c, L + 6 * mm, fy + (fascia - s) / 2, s)
-
-    x_id = L + 6 * mm + s + 5 * mm
-    c_nome = 15.0
-    y_nome = fy + fascia / 2 + 0.6 * mm
-    tracking(c, x_id, y_nome, NOME, "Barlow-B", c_nome, CHIARO, 1.0)
-    c.setFont("Barlow", 10.0)
+    s = 10.0 * mm
+    marchio(c, L + 4.5 * mm, by + (h_bar - s) / 2, s)
+    x_id = L + 4.5 * mm + s + 4.2 * mm
+    tracking(c, x_id, by + h_bar / 2 + 0.5 * mm, NOME, "Barlow-B", 13.5, CHIARO, 0.9)
+    c.setFont("Barlow", 9.0)
     c.setFillColor(ARANCIO)
-    c.drawString(x_id, fy + fascia / 2 - 5.4 * mm, RUOLO)
-    larghezza(RUOLO, "Barlow", 10.0)
+    c.drawString(x_id, by + h_bar / 2 - 4.4 * mm, RUOLO)
+    larghezza(RUOLO, "Barlow", 9.0)
 
     # --- il titolo: la promessa, non il nome. E' la riga che ferma la mano
     # di chi sta buttando la posta.
-    c_claim = 19.0
-    y_claim = fy - 8.0 * mm - c_claim * CAP_BARLOW
+    c_claim, passo_claim = 17.0, 7.2 * mm
+    y_claim = by - 5.0 * mm - c_claim * CAP_BARLOW
     c.setFont("Barlow-B", c_claim)
     c.setFillColor(ANTRACITE)
     for i, riga in enumerate(CLAIM):
-        c.drawString(L, y_claim - i * 8.4 * mm, riga)
-    R_("titolo", L, y_claim - (len(CLAIM) - 1) * 8.4 * mm - 2.2,
+        c.drawString(L, y_claim - i * passo_claim, riga)
+    R_("titolo", L, y_claim - (len(CLAIM) - 1) * passo_claim - 2.2,
        L + max(larghezza(r, "Barlow-B", c_claim) for r in CLAIM),
        y_claim + c_claim * CAP_BARLOW)
 
-    y_sotto = y_claim - (len(CLAIM) - 1) * 8.4 * mm
-    y_filo = y_sotto - 6.4 * mm
+    y_sotto = y_claim - (len(CLAIM) - 1) * passo_claim
+    y_storia = y_sotto - 5.2 * mm
+    c.setFont("Barlow", 8.6)
+    c.setFillColor(MATITA)
+    c.drawString(L, y_storia, STORIA)
+    R_("mestiere", L, y_storia - 2.0, L + larghezza(STORIA, "Barlow", 8.6),
+       y_storia + 8.6 * CAP_BARLOW)
+
+    y_filo = y_storia - 4.8 * mm
     c.setStrokeColor(ARANCIO)
     c.setLineWidth(1.1)
     c.line(L, y_filo, L + 22 * mm, y_filo)
 
+    y_prom = y_filo - 4.6 * mm
+    c.setFont("Barlow-SB", 9.5)
+    c.setFillColor(ARANCIO)
+    c.drawString(L, y_prom, PROMESSA)
+    R_("promessa", L, y_prom - 2.2, L + larghezza(PROMESSA, "Barlow-SB", 9.5),
+       y_prom + 9.5 * CAP_BARLOW)
+
     # --- che cosa fa: elenco puntato, perche' un volantino si scorre
-    c_voce, passo = 10.0, 5.8 * mm
-    y_voce = y_filo - 7.6 * mm
+    c_voce, passo = 9.5, 5.0 * mm
+    y_voce = y_prom - 7.0 * mm
     for i, voce in enumerate(ELENCO):
         y = y_voce - i * passo
         c.setFillColor(ARANCIO)
-        c.rect(L, y + 0.8 * mm, 1.9 * mm, 1.9 * mm, stroke=0, fill=1)
+        c.rect(L, y + 0.7 * mm, 1.8 * mm, 1.8 * mm, stroke=0, fill=1)
         c.setFont("Barlow", c_voce)
         c.setFillColor(ANTRACITE)
-        c.drawString(L + 5.2 * mm, y, voce)
-    R_("elenco", L, y_voce - (len(ELENCO) - 1) * passo - 2.2,
-       L + 5.2 * mm + max(larghezza(v, "Barlow", c_voce) for v in ELENCO),
+        c.drawString(L + 4.8 * mm, y, voce)
+    R_("elenco", L, y_voce - (len(ELENCO) - 1) * passo - 2.1,
+       L + 4.8 * mm + max(larghezza(v, "Barlow", c_voce) for v in ELENCO),
        y_voce + c_voce * CAP_BARLOW)
 
-    # --- il QR sta di fianco all'elenco, non in fondo: laggiu' rubava la
-    # larghezza al numero, che e' la cosa che deve restare piu' grande
-    lato = 21.0 * mm
-    # il codice parte dalla stessa quota della prima voce: due blocchi
+    # --- il codice parte dalla stessa quota della prima voce: due blocchi
     # affiancati che cominciano allineati si leggono come una cosa voluta
+    lato = 20.0 * mm
     qx, qy = R - lato, y_voce + c_voce * CAP_BARLOW - lato
     n, modulo = qr_vettoriale(c, qx, qy, lato)
-    y_did = qy - 3.5 * mm
-    c.setFont("Barlow-SB", 8.5)
+    y_did = qy - 3.2 * mm
+    c.setFont("Barlow-SB", 8.0)
     c.setFillColor(MATITA)
     c.drawCentredString(qx + lato / 2, y_did, "Il sito")
-    larghezza("Il sito", "Barlow-SB", 8.5)
+    larghezza("Il sito", "Barlow-SB", 8.0)
     R_("QR", qx, y_did - 2.0, qx + lato, qy + lato)
 
-    # --- perche' lui: il pezzo che rende credibile l'elenco qui sopra
-    c_storia, passo_s = 9.0, 4.4 * mm
-    y_storia = y_voce - (len(ELENCO) - 1) * passo - 9.9 * mm
-    c.setFont("Barlow", c_storia)
-    c.setFillColor(MATITA)
-    for i, riga in enumerate(STORIA):
-        c.drawString(L, y_storia - i * passo_s, riga)
-    R_("storia", L, y_storia - (len(STORIA) - 1) * passo_s - 2.0,
-       L + max(larghezza(r, "Barlow", c_storia) for r in STORIA),
-       y_storia + c_storia * CAP_BARLOW)
+    # --- tre miniature: i mestieri si fanno vedere, non solo elencare
+    h_min, gap = 15 * mm, 3 * mm
+    w_min = (larg - 2 * gap) / 3.0
+    y_min = B + 9.0 * mm
+    for i, img in enumerate(MINIATURE):
+        foto(c, img, L + i * (w_min + gap), y_min, w_min, h_min)
+    R_("miniature", L, y_min, R, y_min + h_min)
 
-    # --- il filetto, da margine a margine: sotto c'e' solo come chiamarlo
-    y_taglio = B + 21.5 * mm
-    c.setStrokeColor(FILETTO)
-    c.setLineWidth(0.6)
-    c.line(L, y_taglio, R, y_taglio)
-
-    # --- il numero e' la cosa piu' grande della pagina dopo il titolo:
-    # e' l'unica azione che si chiede a chi legge
-    y_prom = B + 16.0 * mm
-    c.setFont("Barlow-SB", 10.0)
-    c.setFillColor(ARANCIO)
-    c.drawString(L, y_prom, PROMESSA)
-    R_("promessa", L, y_prom - 2.2, L + larghezza(PROMESSA, "Barlow-SB", 10.0),
-       y_prom + 10.0 * CAP_BARLOW)
-
-    c_tel = 26.0
-    y_tel = B + 5.4 * mm
+    # --- come chiamarlo. Il numero e' la cosa piu' grande della pagina
+    # dopo il titolo: e' l'unica azione che si chiede a chi legge.
+    c_tel = 22.0
+    y_tel = B + 0.8 * mm
     c.setFont("Barlow-B", c_tel)
     c.setFillColor(ANTRACITE)
     c.drawString(L, y_tel, TEL)
@@ -153,10 +183,9 @@ def disegna(c, ox, oy, registra=False):
 
     c.setFont("Barlow-SB", 9.0)
     c.setFillColor(MATITA)
-    y_zona = B + 0.9 * mm
-    c.drawString(L, y_zona, ZONA)
-    R_("zona", L, y_zona - 2.0, L + larghezza(ZONA, "Barlow-SB", 9.0),
-       y_zona + 9.0 * CAP_BARLOW)
+    c.drawRightString(R, y_tel + 1.2 * mm, ZONA)
+    R_("zona", R - larghezza(ZONA, "Barlow-SB", 9.0), y_tel + 1.2 * mm - 2.0, R,
+       y_tel + 1.2 * mm + 9.0 * CAP_BARLOW)
 
     return n, modulo
 
@@ -175,8 +204,8 @@ def singolo(percorso):
     n, modulo = disegna(c, STACCO, STACCO, registra=True)
     crocini(c, STACCO, STACCO, A6_W, A6_H, 0)
     didascalia(c, pw / 2, 1.6 * mm, "GABRIEL CALASI  ·  volantino A6  ·  105 x 148,5 mm")
-    L, R, B, T = STACCO + MARGINE, STACCO + A6_W - MARGINE, STACCO + MARGINE, STACCO + A6_H - MARGINE
-    errori = verifica(L, R, B, T, minimo=MIN_VOLANTINO)
+    errori = verifica(STACCO + MARGINE, STACCO + A6_W - MARGINE,
+                      STACCO + MARGINE, STACCO + A6_H - MARGINE, minimo=MIN_VOLANTINO)
     for e in errori:
         print("ERRORE:", e)
     if errori:
@@ -206,5 +235,5 @@ def quattro_su_a4(percorso):
 n, modulo = singolo(os.path.join(CARTELLA, "volantino-a6-stampa.pdf"))
 quattro_su_a4(os.path.join(CARTELLA, "volantino-a4-4-per-foglio.pdf"))
 print("volantino A6 + foglio A4 con quattro copie")
-print("  %d elementi | corpo min %.1f pt | QR %dx%d da %.2f mm"
-      % (len(BOX), min(cp for _, cp in CORPI), n, n, modulo / mm))
+print("  %d elementi | corpo min %.1f pt | QR %dx%d da %.2f mm | %d fotografie"
+      % (len(BOX), min(cp for _, cp in CORPI), n, n, modulo / mm, 1 + len(MINIATURE)))
