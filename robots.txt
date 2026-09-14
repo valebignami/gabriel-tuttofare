@@ -1,0 +1,5 @@
+# Tutto il sito è pubblico e indicizzabile: non c'è niente da nascondere.
+User-agent: *
+Allow: /
+
+Sitemap: https://gabriel-tuttofare.vercel.app/sitemap.xml

@@ -232,16 +232,28 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .menu-mobile a:active { background: rgba(242, 101, 34, .14); }
 
 /* ---------- cambio lingua ----------
-   Una voce di servizio, non di navigazione: piu piccola delle altre e
-   riquadrata, cosi si distingue dalle sezioni senza rubare attenzione. */
-.topnav a.lang {
-  font-size: .8125rem; letter-spacing: .06em;
-  padding: .3rem .6rem;
-  border: 1px solid var(--edge); border-radius: 3px;
-  color: var(--fg-2);
+   Un interruttore a due caselle, non una parola sola: la lingua accesa e'
+   piena di arancio, l'altra e' spenta e si puo' premere. Con una parola sola
+   non si capiva se indicasse la lingua corrente o quella di destinazione.
+   Sta nella barra e non nella navigazione, cosi su telefono resta visibile
+   senza aprire il menu. */
+.lang {
+  display: inline-flex; align-items: stretch; flex: none;
+  border: 1px solid var(--edge); border-radius: 3px; overflow: hidden;
+  font-size: .75rem; font-weight: 700; letter-spacing: .08em; line-height: 1;
 }
-.topnav a.lang:hover { color: var(--fg); border-color: var(--orange); }
-.menu-mobile a.lang { color: var(--fg-2); }
+.lang > * { display: flex; align-items: center; padding: .42rem .55rem; }
+.lang .lang-att { background: var(--orange); color: #16181A; }
+.lang .lang-alt {
+  color: var(--fg-2);
+  transition: color .2s var(--ease), background-color .2s var(--ease);
+}
+.lang .lang-alt:hover { color: var(--fg); background: rgba(242, 101, 34, .16); }
+
+@media (max-width: 760px) {
+  .lang { font-size: .6875rem; }
+  .lang > * { padding: .38rem .42rem; }
+}
 
 /* ---------- hero ---------- */
 
