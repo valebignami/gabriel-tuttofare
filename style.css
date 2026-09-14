@@ -231,6 +231,18 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .menu-mobile a:last-child { border-bottom: none; }
 .menu-mobile a:active { background: rgba(242, 101, 34, .14); }
 
+/* ---------- cambio lingua ----------
+   Una voce di servizio, non di navigazione: piu piccola delle altre e
+   riquadrata, cosi si distingue dalle sezioni senza rubare attenzione. */
+.topnav a.lang {
+  font-size: .8125rem; letter-spacing: .06em;
+  padding: .3rem .6rem;
+  border: 1px solid var(--edge); border-radius: 3px;
+  color: var(--fg-2);
+}
+.topnav a.lang:hover { color: var(--fg); border-color: var(--orange); }
+.menu-mobile a.lang { color: var(--fg-2); }
+
 /* ---------- hero ---------- */
 
 /* Tutto l'hero è dimensionato anche sull'ALTEZZA della finestra, non solo sulla

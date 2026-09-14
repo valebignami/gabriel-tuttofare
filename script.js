@@ -23,18 +23,23 @@
   var bottone = document.getElementById('menu-btn');
   var menu = document.getElementById('menu-mobile');
 
+  /* Le etichette stanno nel markup, non qui: la pagina inglese ne mette di sue. */
+  function etichetta(nome, ripiego) {
+    return (bottone && bottone.getAttribute('data-label-' + nome)) || ripiego;
+  }
+
   function chiudiMenu() {
     if (!bottone || !menu) return;
     menu.classList.remove('is-open');
     bottone.setAttribute('aria-expanded', 'false');
-    bottone.setAttribute('aria-label', 'Apri il menu');
+    bottone.setAttribute('aria-label', etichetta('apri', 'Apri il menu'));
   }
 
   if (bottone && menu) {
     bottone.addEventListener('click', function () {
       var aperto = menu.classList.toggle('is-open');
       bottone.setAttribute('aria-expanded', aperto ? 'true' : 'false');
-      bottone.setAttribute('aria-label', aperto ? 'Chiudi il menu' : 'Apri il menu');
+      bottone.setAttribute('aria-label', aperto ? etichetta('chiudi', 'Chiudi il menu') : etichetta('apri', 'Apri il menu'));
     });
 
     /* toccata una voce, il menu si toglie di mezzo */
