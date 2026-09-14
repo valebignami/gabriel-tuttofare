@@ -7,3 +7,6 @@ desktop.ini
 # screenshot temporanei delle verifiche
 *.png
 .playwright-mcp/
+
+# originali delle foto: la versione pronta per il sito sta in img/
+/Gabriel.jpeg
