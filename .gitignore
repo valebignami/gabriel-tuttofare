@@ -10,3 +10,7 @@ desktop.ini
 
 # originali delle foto: la versione pronta per il sito sta in img/
 /Gabriel.jpeg
+
+# cache di Python degli script in tools/
+__pycache__/
+*.pyc
