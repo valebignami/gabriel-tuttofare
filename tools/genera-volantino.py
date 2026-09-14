@@ -54,12 +54,16 @@ MIN_VOLANTINO = 8.0
 M_SX, M_DX, M_ALTO, M_BASSO = 8 * mm, 8 * mm, 8 * mm, 10 * mm
 
 TITOLO = ("UN SOLO", "PROFESSIONISTA", "PER TUTTA LA CASA")
-FOTO_GRANDE = "img/cta.jpg"
+
+# I lavori come righe puntate invece che come elenco a cinque voci: un elenco
+# verticale rifa' la pila che si voleva togliere, e su un volantino le voci si
+# scorrono, non si leggono una per una.
+SERVIZI = ("Idraulica · Caldaie · Condizionatori",
+           "Bagni · Muratura · Piastrelle",
+           "Riparazioni · Tinteggiatura")
 # Il ritratto vero al posto di uno scorcio di lavoro: su un volantino
 # una faccia vale piu' di un dettaglio, e il formato e' gia' il suo.
-RITRATTO = "img/gabriele.jpg"
-# busto invece che figura intera: a 25 mm di larghezza il volto deve leggersi
-RITRATTO_RIQUADRO = (0.40, 0.10, 0.88, 0.56)
+FOTO = "img/cta.jpg"
 
 _cache = {}
 
@@ -94,6 +98,27 @@ def foto(c, percorso, x, y, w, h, riquadro=None):
     c.drawImage(_cache[chiave], x, y, w, h)
 
 
+def riga_puntata(c, x, y, testo, corpo):
+    """Una riga di voci separate dal punto medio, con i punti in arancio.
+
+    I separatori colorati danno ritmo alla riga senza aggiungere un solo
+    elemento alla composizione: e' il colore a fare il lavoro dello spazio."""
+    from reportlab.pdfbase import pdfmetrics
+    inizio = x
+    for i, pezzo in enumerate(testo.split(" · ")):
+        if i:
+            c.setFont("Barlow-SB", corpo)
+            c.setFillColor(ARANCIO)
+            c.drawString(x, y, "·")
+            x += pdfmetrics.stringWidth("·", "Barlow-SB", corpo) + 1.6 * mm
+        c.setFont("Barlow", corpo)
+        c.setFillColor(ANTRACITE)
+        c.drawString(x, y, pezzo)
+        x += pdfmetrics.stringWidth(pezzo, "Barlow", corpo) + 1.6 * mm
+    larghezza(testo, "Barlow", corpo)
+    return x - inizio - 1.6 * mm
+
+
 def corpo_che_entra(testi, font, largh, lo=6.0, hi=90.0):
     """Il corpo massimo che tiene la riga piu' lunga dentro la larghezza.
     Binaria, non a occhio."""
@@ -120,14 +145,9 @@ def disegna(c, ox, oy, registra=False):
     # Occupa la parte alta e non la divide a meta': prende piu' della meta',
     # perche' una superficie divisa in due parti uguali non sceglie niente.
     y_foto = oy + 70 * mm
-    foto(c, FOTO_GRANDE, L, y_foto, R - L, T - y_foto)
+    foto(c, FOTO, L, y_foto, R - L, T - y_foto)
 
-    # la seconda immagine continua la colonna destra sotto la grande, a filo:
-    # e' il contrappeso che tiene la composizione fuori asse
-    x_sec, h_sec = ox + 72 * mm, 29 * mm
-    foto(c, RITRATTO, x_sec, y_foto - h_sec, R - x_sec, h_sec, RITRATTO_RIQUADRO)
-    R_("foto grande", L, y_foto, R, T)
-    R_("ritratto", x_sec, y_foto - h_sec, R, y_foto)
+    R_("fotografia", L, y_foto, R, T)
 
     # ------------------------------------------- lo scavalco: blocco scuro
     # Appoggia sull'angolo della fotografia e scende oltre il suo bordo:
@@ -158,51 +178,52 @@ def disegna(c, ox, oy, registra=False):
         larghezza(riga, "Anton", c_tit)
 
     # ------------------------------------------------- il campo bianco
-    c_voce, passo_v = 9.2, 4.7 * mm
-    # l'elenco sta nella colonna di sinistra e parte subito sotto il blocco:
-    # il ritratto occupa la destra e non gli contende la quota
-    y_elenco = by0 - 2.5 * mm - c_voce * CAP_BARLOW
-    for i, voce in enumerate(ELENCO):
-        y = y_elenco - i * passo_v
-        c.setFillColor(ARANCIO)
-        c.rect(L, y + 0.7 * mm, 1.7 * mm, 1.7 * mm, stroke=0, fill=1)
-        c.setFont("Barlow", c_voce)
-        c.setFillColor(ANTRACITE)
-        c.drawString(L + 4.6 * mm, y, voce)
-    R_("elenco", L, y_elenco - (len(ELENCO) - 1) * passo_v - 2.1,
-       L + 4.6 * mm + max(larghezza(v, "Barlow", c_voce) for v in ELENCO),
-       y_elenco + c_voce * CAP_BARLOW)
+    # Tre gruppi separati, non una pila sola: che cosa fa, poi il filetto,
+    # poi come si chiama. Il raggruppamento e' la gerarchia.
+    c_serv, passo_s = 8.6, 4.6 * mm
+    y_serv = by0 - 3.6 * mm - c_serv * CAP_BARLOW
+    largo = 0
+    for i, riga in enumerate(SERVIZI):
+        largo = max(largo, riga_puntata(c, L, y_serv - i * passo_s, riga, c_serv))
+    R_("servizi", L, y_serv - (len(SERVIZI) - 1) * passo_s - 2.0, L + largo,
+       y_serv + c_serv * CAP_BARLOW)
 
-    # il codice parte dalla stessa quota della prima voce: due blocchi
-    # affiancati che cominciano allineati si leggono come una cosa voluta
+    # il codice sta in basso a destra e fa da contrappeso al numero, che pesa
+    # in basso a sinistra: sotto il filetto la pagina ha due appoggi, non uno
     lato = 19.0 * mm
-    qx, qy = R - lato, y_foto - h_sec - 3.0 * mm - lato
+    y_did = oy + 11.0 * mm                     # stessa linea di base della zona
+    qx, qy = R - lato, y_did + 3.0 * mm
     n, modulo = qr_vettoriale(c, qx, qy, lato)
-    y_did = qy - 3.0 * mm
     c.setFont("Barlow-SB", 8.0)
     c.setFillColor(MATITA)
     c.drawCentredString(qx + lato / 2, y_did, "Il sito")
     larghezza("Il sito", "Barlow-SB", 8.0)
     R_("QR", qx, y_did - 2.0, qx + lato, qy + lato)
 
-    # --------------------------------------------- la seconda voce alta
-    c_tel = 30.0
-    y_tel = B + 5.6 * mm
-    c.setFont("Anton", c_tel)
-    c.setFillColor(ANTRACITE)
-    c.drawString(L, y_tel, TEL)
-    R_("telefono", L, y_tel, L + larghezza(TEL, "Anton", c_tel), y_tel + c_tel * CAP_ANTON)
+    # il filetto divide che cosa fa da come si chiama, e si ferma prima della
+    # colonna del codice
+    y_filo = 34.5 * mm + oy
+    c.setStrokeColor(ARANCIO)
+    c.setLineWidth(0.8)
+    c.line(L, y_filo, ox + 68 * mm, y_filo)
 
-    y_prom = y_tel + c_tel * CAP_ANTON + 2.8 * mm
+    y_prom = y_filo - 5.4 * mm
     c.setFont("Barlow-SB", 9.0)
     c.setFillColor(ARANCIO)
     c.drawString(L, y_prom, PROMESSA)
     R_("promessa", L, y_prom - 2.1, L + larghezza(PROMESSA, "Barlow-SB", 9.0),
        y_prom + 9.0 * CAP_BARLOW)
 
+    c_tel = 30.0
+    y_tel = oy + 16.5 * mm
+    c.setFont("Anton", c_tel)
+    c.setFillColor(ANTRACITE)
+    c.drawString(L, y_tel, TEL)
+    R_("telefono", L, y_tel, L + larghezza(TEL, "Anton", c_tel), y_tel + c_tel * CAP_ANTON)
+
     c.setFont("Barlow-SB", 8.6)
     c.setFillColor(MATITA)
-    y_zona = B + 1.0 * mm                      # sotto il numero, stesso asse
+    y_zona = oy + 11.0 * mm
     c.drawString(L, y_zona, ZONA)
     R_("zona", L, y_zona - 2.0, L + larghezza(ZONA, "Barlow-SB", 8.6),
        y_zona + 8.6 * CAP_BARLOW)
@@ -225,8 +246,7 @@ def singolo(percorso):
     didascalia(c, pw / 2, 1.6 * mm, "GABRIEL CALASI  ·  volantino A6  ·  105 x 148,5 mm")
     errori = verifica(STACCO + M_SX, STACCO + A6_W - M_DX,
                       STACCO + M_BASSO, STACCO + A6_H - M_ALTO, minimo=MIN_VOLANTINO,
-                      ammesse=(("blocco", "foto grande"),      # lo scavalco e' il progetto
-                               ("foto grande", "ritratto")))     # sono a filo di proposito
+                      ammesse=(("blocco", "fotografia"),))    # lo scavalco e' il progetto
     for e in errori:
         print("ERRORE:", e)
     if errori:
