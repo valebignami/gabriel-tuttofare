@@ -26,7 +26,7 @@ from tracciato import (ANTRACITE, ARANCIO, CARTA, CHIARO, FUMO, MATITA, FILETTO,
                        BOX, CORPI,
                        tracking, marchio, qr_vettoriale, crocini, didascalia)
 
-CARTELLA = sys.argv[1] if len(sys.argv) > 1 else "biglietto"
+CARTELLA = sys.argv[1] if len(sys.argv) > 1 else "stampati"
 carica_font()
 
 # ---------------------------------------------------------------- geometria

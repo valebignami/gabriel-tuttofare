@@ -45,7 +45,7 @@ from tracciato import (ANTRACITE, ARANCIO, CHIARO, FUMO, MATITA, CAP_ANTON, CAP_
                        carica_font, azzera, reg, larghezza, verifica, BOX, CORPI,
                        tracking, marchio, qr_vettoriale, crocini, didascalia)
 
-CARTELLA = sys.argv[1] if len(sys.argv) > 1 else "biglietto"
+CARTELLA = sys.argv[1] if len(sys.argv) > 1 else "stampati"
 carica_font()
 
 A6_W, A6_H = 105 * mm, 148.5 * mm
