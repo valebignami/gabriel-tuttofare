@@ -1,31 +1,35 @@
 # -*- coding: utf-8 -*-
 """MANO FERMA — volantino A6 di Gabriel Calasi.
 
-A6 e' 105 x 148,5 mm: quattro riempiono esattamente un A4, senza sfrido e con
-due soli tagli dritti. Escono due file, il singolo con i crocini e il foglio
-gia' impaginato.
+A6 e' 105 x 148,5 mm: quattro riempiono esattamente un A4, con due tagli
+dritti. Escono il singolo con i crocini e il foglio gia' impaginato.
 
-L'IMPIANTO. La versione precedente impilava nove fasce orizzontali tutte
-larghe uguale: ordinata, e per questo invisibile. Qui comanda un gesto solo.
-Una fotografia grande occupa la parte alta. Un blocco antracite le appoggia
-sopra l'angolo in basso a sinistra e scende oltre il suo bordo, cucendo la
-zona dell'immagine a quella del testo: e' lo scavalco che toglie alla pagina
-il ritmo dell'elenco. Il blocco non arriva al margine destro, dove una
-seconda immagine piu' piccola continua la colonna e tiene la composizione
-fuori asse. Sotto, campo bianco: elenco a sinistra, codice a destra, e il
-numero di telefono come seconda voce alta.
+L'IMPIANTO. Quattro masse, dall'alto in basso, e nient'altro:
 
-Il titolo sta dentro il blocco scuro in Anton, il carattere da insegna del
-sito, montato su tre righe con interlinea stretta perche' diventi una forma
-prima ancora che una frase. E' l'unico punto in cui questo carattere serve
-davvero: un volantino e' un manifesto in miniatura.
+  1. una riga d'intestazione sottile, marchio e nome;
+  2. la fotografia, larga il doppio della sua altezza;
+  3. un campo antracite che occupa un terzo della pagina e porta il titolo
+     in Anton piu' i mestieri in maiuscoletto spaziato;
+  4. la zona bianca dell'azione: la promessa, il numero, la zona, il codice.
 
-LA STAMPA. Niente arriva al bordo del foglio, fotografie comprese. Una
-stampante da casa non copre gli ultimi millimetri: un'immagine al vivo
-uscirebbe con una cornice bianca storta e un taglio da indovinare. Cosi'
-invece il margine non stampabile e' carta bianca comunque, e il taglio puo'
-sbagliare di due millimetri senza che si veda. I margini non sono pero'
-uguali su tutti i lati: quello inferiore e' piu' largo, come vuole l'occhio.
+Le versioni precedenti avevano due difetti che tornavano a ogni giro. Il
+primo: righe di testo piccole lasciate galleggiare da sole su fondo bianco,
+senza un campo che le contenesse — sembravano avanzi. Ora ogni testo sta
+dentro una massa. Il secondo: vuoti sparsi in piu' punti, che leggono come
+buchi. Ora il vuoto e' concentrato nelle due fasce d'aria fra le masse, dove
+si legge come respiro.
+
+I CORPI, per la stampa a dimensione reale:
+  titolo Anton 28 pt · numero Anton 30 pt · mestieri 9 pt maiuscoletto
+  promessa 9,5 pt · nome 8,5 pt · zona e didascalia 8,6 pt
+Nessun testo sotto gli 8 pt: su un volantino A6, letto a mezzo braccio,
+sotto quella soglia le parole si chiudono.
+
+LA STAMPA. Niente arriva al bordo del foglio, fotografia e campo scuro
+compresi: una stampante da casa non copre gli ultimi millimetri, e un
+elemento al vivo uscirebbe con una cornice bianca storta. Il margine non
+stampabile resta carta bianca comunque, e il taglio puo' sbagliare di due
+millimetri senza che si veda.
 """
 
 import os, sys
@@ -33,10 +37,11 @@ from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.units import mm
 from reportlab.lib.colors import Color
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase import pdfmetrics
 from PIL import Image
 
-from tracciato import (ANTRACITE, ARANCIO, CHIARO, MATITA, CAP_ANTON, CAP_BARLOW,
-                       NOME, ELENCO, STORIA, PROMESSA, TEL, ZONA,
+from tracciato import (ANTRACITE, ARANCIO, CHIARO, FUMO, MATITA, CAP_ANTON, CAP_BARLOW,
+                       NOME, RUOLO, PROMESSA, TEL, ZONA,
                        carica_font, azzera, reg, larghezza, verifica, BOX, CORPI,
                        tracking, marchio, qr_vettoriale, crocini, didascalia)
 
@@ -45,46 +50,28 @@ carica_font()
 
 A6_W, A6_H = 105 * mm, 148.5 * mm
 A4_W, A4_H = 210 * mm, 297 * mm
-STACCO = 4 * mm            # spazio per i crocini attorno al singolo A6
+STACCO = 4 * mm
 DPI_STAMPA = 300
 MIN_VOLANTINO = 8.0
 
-# I margini non sono uguali: quello basso e' piu' largo perche' un margine
-# inferiore uguale agli altri, otticamente, sembra piu' stretto.
 M_SX, M_DX, M_ALTO, M_BASSO = 8 * mm, 8 * mm, 8 * mm, 10 * mm
 
 TITOLO = ("UN SOLO", "PROFESSIONISTA", "PER TUTTA LA CASA")
-
-# I lavori come righe puntate invece che come elenco a cinque voci: un elenco
-# verticale rifa' la pila che si voleva togliere, e su un volantino le voci si
-# scorrono, non si leggono una per una.
-SERVIZI = ("Idraulica · Caldaie · Condizionatori",
-           "Bagni · Muratura · Piastrelle",
-           "Riparazioni · Tinteggiatura")
-# Il ritratto vero al posto di uno scorcio di lavoro: su un volantino
-# una faccia vale piu' di un dettaglio, e il formato e' gia' il suo.
+# Due righe, non sette voci: su un volantino la lista lunga non si legge e
+# costringe a un corpo che in stampa si chiude.
+MESTIERI = ("IDRAULICA · CALDAIE · CONDIZIONATORI",
+            "BAGNI · MURATURA · PIASTRELLE")
 FOTO = "img/cta.jpg"
 
 _cache = {}
 
 
-def foto(c, percorso, x, y, w, h, riquadro=None):
-    """Ritaglia sul formato richiesto e disegna a 300 dpi.
-
-    Il ritaglio si fa qui e non lo si lascia al PDF: adattare l'immagine al
-    riquadro la schiaccerebbe, e una cosa storta si nota subito.
-
-    `riquadro` e' la porzione da usare, in frazioni di lato (sinistra, alto,
-    destra, basso). Serve quando il centro geometrico non e' il soggetto:
-    in un ritratto a figura intera il volto sta in alto, e prendere il centro
-    significa consegnare una faccia grande tre millimetri."""
-    chiave = (percorso, round(w, 2), round(h, 2), riquadro)
+def foto(c, percorso, x, y, w, h):
+    """Ritaglia al centro sul formato richiesto e disegna a 300 dpi. Il
+    ritaglio si fa qui: adattare l'immagine al riquadro la schiaccerebbe."""
+    chiave = (percorso, round(w, 2), round(h, 2))
     if chiave not in _cache:
         im = Image.open(percorso)
-        if riquadro:
-            iw, ih = im.size
-            a, b, cc, d = riquadro
-            im = im.crop((int(a * iw), int(b * ih), int(cc * iw), int(d * ih)))
         iw, ih = im.size
         voluto = w / float(h)
         if iw / float(ih) > voluto:
@@ -98,135 +85,120 @@ def foto(c, percorso, x, y, w, h, riquadro=None):
     c.drawImage(_cache[chiave], x, y, w, h)
 
 
-def riga_puntata(c, x, y, testo, corpo):
-    """Una riga di voci separate dal punto medio, con i punti in arancio.
-
-    I separatori colorati danno ritmo alla riga senza aggiungere un solo
-    elemento alla composizione: e' il colore a fare il lavoro dello spazio."""
-    from reportlab.pdfbase import pdfmetrics
-    inizio = x
-    for i, pezzo in enumerate(testo.split(" · ")):
-        if i:
-            c.setFont("Barlow-SB", corpo)
-            c.setFillColor(ARANCIO)
-            c.drawString(x, y, "·")
-            x += pdfmetrics.stringWidth("·", "Barlow-SB", corpo) + 1.6 * mm
-        c.setFont("Barlow", corpo)
-        c.setFillColor(ANTRACITE)
-        c.drawString(x, y, pezzo)
-        x += pdfmetrics.stringWidth(pezzo, "Barlow", corpo) + 1.6 * mm
-    larghezza(testo, "Barlow", corpo)
-    return x - inizio - 1.6 * mm
-
-
-def corpo_che_entra(testi, font, largh, lo=6.0, hi=90.0):
+def corpo_che_entra(testi, font, largh, track=0.0, tetto=90.0):
     """Il corpo massimo che tiene la riga piu' lunga dentro la larghezza.
-    Binaria, non a occhio."""
-    from reportlab.pdfbase import pdfmetrics
+    Binaria, non a occhio: e' l'unico modo perche' un titolo composto da
+    parole diverse non esca dal campo che lo contiene."""
+    lo, hi = 6.0, tetto
     for _ in range(60):
         mid = (lo + hi) / 2
-        if max(pdfmetrics.stringWidth(t, font, mid) for t in testi) <= largh:
+        peggio = max(pdfmetrics.stringWidth(t, font, mid) + track * (len(t) - 1) for t in testi)
+        if peggio <= largh:
             lo = mid
         else:
             hi = mid
     return lo
 
 
+def riga_mestieri(c, x, y, testo, corpo, track):
+    """Maiuscoletto spaziato con i punti di separazione in arancio: il ritmo
+    della riga lo fa il colore, senza aggiungere elementi alla pagina."""
+    for ch in testo:
+        c.setFont("Barlow-SB", corpo)
+        c.setFillColor(ARANCIO if ch == "·" else CHIARO)
+        c.drawString(x, y, ch)
+        x += pdfmetrics.stringWidth(ch, "Barlow-SB", corpo) + track
+    larghezza(testo, "Barlow-SB", corpo)
+
+
 def disegna(c, ox, oy, registra=False):
-    """Il volantino, con l'angolo in basso a sinistra in (ox, oy)."""
     def R_(nome, x0, y0, x1, y1):
         if registra:
             reg(nome, x0, y0, x1, y1)
 
     L, R = ox + M_SX, ox + A6_W - M_DX
     B, T = oy + M_BASSO, oy + A6_H - M_ALTO
+    larg = R - L
 
-    # ---------------------------------------------------- il gesto: la foto
-    # Occupa la parte alta e non la divide a meta': prende piu' della meta',
-    # perche' una superficie divisa in due parti uguali non sceglie niente.
-    y_foto = oy + 70 * mm
-    foto(c, FOTO, L, y_foto, R - L, T - y_foto)
+    # ------------------------------------------- 1. l'intestazione sottile
+    s = 7.0 * mm
+    marchio(c, L, T - s, s)
+    tracking(c, L + s + 3.2 * mm, T - s + (s - 8.5 * CAP_BARLOW) / 2 + 0.2 * mm,
+             NOME, "Barlow-SB", 8.5, ANTRACITE, 1.1)
+    c.setFont("Barlow", 8.5)
+    c.setFillColor(MATITA)
+    c.drawRightString(R, T - s + (s - 8.5 * CAP_BARLOW) / 2 + 0.2 * mm, RUOLO)
+    larghezza(RUOLO, "Barlow", 8.5)
+    R_("intestazione", L, T - s, R, T)
 
-    R_("fotografia", L, y_foto, R, T)
+    # ------------------------------------------------- 2. la fotografia
+    # Larga il doppio dell'altezza: un rapporto deciso si legge come una
+    # scelta, uno qualunque si legge come un ritaglio capitato.
+    y_foto, h_foto = oy + 89 * mm, 40 * mm
+    foto(c, FOTO, L, y_foto, larg, h_foto)
+    R_("fotografia", L, y_foto, R, y_foto + h_foto)
 
-    # ------------------------------------------- lo scavalco: blocco scuro
-    # Appoggia sull'angolo della fotografia e scende oltre il suo bordo:
-    # cuce la zona dell'immagine a quella del testo e rompe il ritmo a fasce.
-    bx0, bx1 = L, ox + 67 * mm
-    by0, by1 = oy + 56 * mm, oy + 92 * mm
+    # -------------------------------------------------- 3. il campo scuro
+    # Un terzo della pagina. Il testo non galleggia sul bianco: sta dentro
+    # una massa, ed e' la massa a dargli peso.
+    cy0, cy1 = oy + 34 * mm, oy + 83 * mm
     c.setFillColor(ANTRACITE)
-    c.rect(bx0, by0, bx1 - bx0, by1 - by0, stroke=0, fill=1)
-    R_("blocco", bx0, by0, bx1, by1)
+    c.rect(L, cy0, larg, cy1 - cy0, stroke=0, fill=1)
+    R_("campo", L, cy0, R, cy1)
 
     pad = 5.5 * mm
-    ix0, ix1 = bx0 + pad, bx1 - pad
+    ix0, ix1 = L + pad, R - pad
 
-    s = 6.6 * mm
-    y_m = by1 - 3.2 * mm - s
-    marchio(c, ix0, y_m, s)
-    tracking(c, ix0 + s + 3.0 * mm, y_m + (s - 8.0 * .72) / 2 + 0.3 * mm,
-             NOME, "Barlow-SB", 8.0, ARANCIO, 1.2)
-
-    # il titolo: tre righe strette, che si leggono come una forma
     c_tit = min(28.0, corpo_che_entra(TITOLO, "Anton", ix1 - ix0))
-    passo = c_tit * CAP_ANTON + 2.0 * mm
-    y_tit = by0 + pad + (len(TITOLO) - 1) * passo
+    passo_tit = c_tit * CAP_ANTON + 2.2 * mm
+    y_tit = cy1 - pad - c_tit * CAP_ANTON
     c.setFont("Anton", c_tit)
     c.setFillColor(CHIARO)
     for i, riga in enumerate(TITOLO):
-        c.drawString(ix0, y_tit - i * passo, riga)
+        c.drawString(ix0, y_tit - i * passo_tit, riga)
         larghezza(riga, "Anton", c_tit)
+    R_("titolo", ix0, y_tit - (len(TITOLO) - 1) * passo_tit,
+       ix0 + max(larghezza(r, "Anton", c_tit) for r in TITOLO),
+       y_tit + c_tit * CAP_ANTON)
 
-    # ------------------------------------------------- il campo bianco
-    # Tre gruppi separati, non una pila sola: che cosa fa, poi il filetto,
-    # poi come si chiama. Il raggruppamento e' la gerarchia.
-    c_serv, passo_s = 8.6, 4.6 * mm
-    y_serv = by0 - 3.6 * mm - c_serv * CAP_BARLOW
-    largo = 0
-    for i, riga in enumerate(SERVIZI):
-        largo = max(largo, riga_puntata(c, L, y_serv - i * passo_s, riga, c_serv))
-    R_("servizi", L, y_serv - (len(SERVIZI) - 1) * passo_s - 2.0, L + largo,
-       y_serv + c_serv * CAP_BARLOW)
+    c_mest, passo_m = min(9.0, corpo_che_entra(MESTIERI, "Barlow-SB", ix1 - ix0, track=0.55)), 4.6 * mm
+    y_mest = cy0 + pad + (len(MESTIERI) - 1) * passo_m + 0.2 * mm
+    for i, riga in enumerate(MESTIERI):
+        riga_mestieri(c, ix0, y_mest - i * passo_m, riga, c_mest, 0.55)
+    R_("mestieri", ix0, y_mest - (len(MESTIERI) - 1) * passo_m - 2.0,
+       ix0 + max(larghezza(r, "Barlow-SB", c_mest, 0.55) for r in MESTIERI),
+       y_mest + c_mest * CAP_BARLOW)
 
-    # il codice sta in basso a destra e fa da contrappeso al numero, che pesa
-    # in basso a sinistra: sotto il filetto la pagina ha due appoggi, non uno
-    lato = 19.0 * mm
-    y_did = oy + 11.0 * mm                     # stessa linea di base della zona
-    qx, qy = R - lato, y_did + 3.0 * mm
-    n, modulo = qr_vettoriale(c, qx, qy, lato)
-    c.setFont("Barlow-SB", 8.0)
-    c.setFillColor(MATITA)
-    c.drawCentredString(qx + lato / 2, y_did, "Il sito")
-    larghezza("Il sito", "Barlow-SB", 8.0)
-    R_("QR", qx, y_did - 2.0, qx + lato, qy + lato)
-
-    # il filetto divide che cosa fa da come si chiama, e si ferma prima della
-    # colonna del codice
-    y_filo = 34.5 * mm + oy
-    c.setStrokeColor(ARANCIO)
-    c.setLineWidth(0.8)
-    c.line(L, y_filo, ox + 68 * mm, y_filo)
-
-    y_prom = y_filo - 5.4 * mm
-    c.setFont("Barlow-SB", 9.0)
+    # ---------------------------------------------- 4. la zona dell'azione
+    y_prom = oy + 28.0 * mm
+    c.setFont("Barlow-SB", 9.5)
     c.setFillColor(ARANCIO)
     c.drawString(L, y_prom, PROMESSA)
-    R_("promessa", L, y_prom - 2.1, L + larghezza(PROMESSA, "Barlow-SB", 9.0),
-       y_prom + 9.0 * CAP_BARLOW)
+    R_("promessa", L, y_prom - 2.1, L + larghezza(PROMESSA, "Barlow-SB", 9.5),
+       y_prom + 9.5 * CAP_BARLOW)
 
     c_tel = 30.0
-    y_tel = oy + 16.5 * mm
+    y_tel = oy + 15.8 * mm
     c.setFont("Anton", c_tel)
     c.setFillColor(ANTRACITE)
     c.drawString(L, y_tel, TEL)
     R_("telefono", L, y_tel, L + larghezza(TEL, "Anton", c_tel), y_tel + c_tel * CAP_ANTON)
 
+    y_base = oy + 10.9 * mm            # l'ultima riga corre da un margine all'altro
     c.setFont("Barlow-SB", 8.6)
     c.setFillColor(MATITA)
-    y_zona = oy + 11.0 * mm
-    c.drawString(L, y_zona, ZONA)
-    R_("zona", L, y_zona - 2.0, L + larghezza(ZONA, "Barlow-SB", 8.6),
-       y_zona + 8.6 * CAP_BARLOW)
+    c.drawString(L, y_base, ZONA)
+    R_("zona", L, y_base - 2.0, L + larghezza(ZONA, "Barlow-SB", 8.6),
+       y_base + 8.6 * CAP_BARLOW)
+
+    lato = 18.0 * mm
+    qx, qy = R - lato, y_base + 3.1 * mm
+    n, modulo = qr_vettoriale(c, qx, qy, lato)
+    c.setFont("Barlow-SB", 8.6)
+    c.setFillColor(MATITA)
+    c.drawCentredString(qx + lato / 2, y_base, "Il sito")
+    larghezza("Il sito", "Barlow-SB", 8.6)
+    R_("QR", qx, y_base - 2.0, qx + lato, qy + lato)
 
     return n, modulo
 
@@ -246,7 +218,10 @@ def singolo(percorso):
     didascalia(c, pw / 2, 1.6 * mm, "GABRIEL CALASI  ·  volantino A6  ·  105 x 148,5 mm")
     errori = verifica(STACCO + M_SX, STACCO + A6_W - M_DX,
                       STACCO + M_BASSO, STACCO + A6_H - M_ALTO, minimo=MIN_VOLANTINO,
-                      ammesse=(("blocco", "fotografia"),))    # lo scavalco e' il progetto
+                      # il testo dentro il campo e' il progetto; fra titolo e
+                      # mestieri invece lo stacco va rispettato, ed e' li' che
+                      # la versione precedente sovrapponeva senza accorgersene
+                      ammesse=(("campo", "titolo"), ("campo", "mestieri")))
     for e in errori:
         print("ERRORE:", e)
     if errori:
@@ -256,8 +231,6 @@ def singolo(percorso):
 
 
 def quattro_su_a4(percorso):
-    """Le linee di taglio cadono nel bianco fra un volantino e l'altro: si
-    puo' tagliare con le forbici senza intaccare la stampa."""
     c = rl_canvas.Canvas(percorso, pagesize=(A4_W, A4_H))
     c.setTitle("Gabriel Calasi - volantini, 4 per foglio A4")
     c.setAuthor("Gabriel Calasi")
@@ -275,5 +248,5 @@ def quattro_su_a4(percorso):
 n, modulo = singolo(os.path.join(CARTELLA, "volantino-a6-stampa.pdf"))
 quattro_su_a4(os.path.join(CARTELLA, "volantino-a4-4-per-foglio.pdf"))
 print("volantino A6 + foglio A4 con quattro copie")
-print("  %d blocchi | corpo min %.1f pt | QR %dx%d da %.2f mm"
+print("  %d masse | corpo min %.1f pt | QR %dx%d da %.2f mm"
       % (len(BOX), min(cp for _, cp in CORPI), n, n, modulo / mm))
