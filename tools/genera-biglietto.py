@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*-
-"""TRACCIATO — biglietto da visita, Gabriel Calasi.
-Due pagine (fronte/retro), 85x55 mm, abbondanza 3 mm, crocini di taglio.
-QR disegnato in vettoriale: nitido a qualsiasi risoluzione."""
+"""TRACCIATO — biglietto da visita di Gabriel Calasi.
+
+Un solo lato, 85x55 mm, abbondanza 3 mm, crocini di taglio.
+Caratteri e colori sono quelli del sito: carta e schermo dicono la stessa cosa.
+
+Tre regole non negoziabili, verificate dal programma prima di salvare:
+  - nessun testo sotto i 7,5 pt, perche' un biglietto si legge in mano
+    e non allo zoom;
+  - niente fuori dai margini, niente sopra qualcos'altro;
+  - niente che invada la colonna del QR.
+"""
 
 import os, sys, tempfile
 import qrcode
@@ -11,13 +19,13 @@ from reportlab.lib.colors import HexColor, Color
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-OUT = sys.argv[1] if len(sys.argv) > 1 else "biglietto"   # cartella di uscita
+OUT = sys.argv[1] if len(sys.argv) > 1 else "biglietto/gabriel-biglietto-stampa.pdf"
 
 
 def carica_font():
-    """I caratteri del biglietto sono gli stessi del sito, presi da fonts/.
-    Sul web sono .woff2: qui vengono riscritti in .ttf, che reportlab sa
-    incorporare nel PDF. Nessun font di sistema, nessuna sostituzione."""
+    """I caratteri del sito stanno in fonts/ come .woff2. Qui vengono riscritti
+    in .ttf, che reportlab sa incorporare nel PDF: nessun font di sistema,
+    nessuna sostituzione a sorpresa in tipografia."""
     from fontTools.ttLib import TTFont as FTFont
     tmp = tempfile.mkdtemp(prefix="biglietto-font-")
     for nome, sorgente in (("Anton", "Anton-400.woff2"),
@@ -36,81 +44,92 @@ carica_font()
 ANTRACITE = HexColor("#16181A")
 ARANCIO   = HexColor("#F26522")
 CARTA     = HexColor("#F3F0E9")
-# grigi ricavati dai due estremi: nessun terzo colore entra nella tavolozza
-FUMO      = HexColor("#8A8F94")   # testo secondario sul fondo scuro
-MATITA    = HexColor("#6E6A64")   # testo secondario sulla carta
+CHIARO    = HexColor("#FFFFFF")
+FUMO      = HexColor("#A7ACB1")   # secondario sul fondo scuro, schiarito per leggere
 
 # ---------------------------------------------------------------- geometria
 TRIM_W, TRIM_H = 85 * mm, 55 * mm
 BLEED, MARK_ROOM = 3 * mm, 5 * mm
-OFF = BLEED + MARK_ROOM                       # origine del taglio nella pagina
+OFF = BLEED + MARK_ROOM
 PAGE_W, PAGE_H = TRIM_W + 2 * OFF, TRIM_H + 2 * OFF
-SAFE = 6 * mm                                 # margine di sicurezza dal taglio
+SAFE = 5 * mm
 
-URL   = "https://gabriel-tuttofare.vercel.app"
-SITO  = "gabriel-tuttofare.vercel.app"
-TEL   = "320 417 7267"
+L, R = OFF + SAFE, OFF + TRIM_W - SAFE        # colonne
+B, T = OFF + SAFE, OFF + TRIM_H - SAFE        # piede e cielo
+CAP = 0.727                                   # rapporto maiuscola/em di Anton
+
+# ---------------------------------------------------------------- contenuto
+NOME   = "GABRIEL CALASI"
+RUOLO  = "TUTTOFARE PER LA CASA"
+LAVORI = ("Idraulica, caldaie e condizionatori",
+          "Bagni, muratura, piastrelle e riparazioni")
+TEL    = "320 417 7267"
+ZONA   = "MILANO E PROVINCIA"
+SITO   = "gabriel-tuttofare.vercel.app"
+URL    = "https://gabriel-tuttofare.vercel.app"
+
+# ------------------------------------------------- scala tipografica (punti)
+# Sotto i 7,5 pt un biglietto non si legge in mano: da li' in su si sale.
+C_NOME, C_TEL     = 23.0, 25.0        # Anton, le due voci alte
+C_RUOLO, C_LAVORI = 8.0, 8.0
+C_ZONA, C_SITO    = 8.0, 7.6
+MINIMO = 7.5
+ARIA = 2.0 * mm        # stacco minimo fra due blocchi incolonnati
 
 # ---------------------------------------------------------------- strumenti
 
-BOX = []            # ogni elemento dichiara il suo ingombro: si verifica, non si spera
+BOX, CORPI = [], []
 
 
-def reg(pagina, nome, x0, y0, x1, y1):
-    BOX.append((pagina, nome, x0, y0, x1, y1))
+def reg(nome, x0, y0, x1, y1):
+    BOX.append((nome, x0, y0, x1, y1))
+
+
+def larghezza(testo, font, corpo, track=0.0):
+    CORPI.append((testo[:24], corpo))
+    return pdfmetrics.stringWidth(testo, font, corpo) + track * (len(testo) - 1)
 
 
 def verifica():
-    """Nessun elemento esce dall'area di sicurezza, nessuno tocca un altro.
-    Non e' negoziabile: si controlla con i numeri, non guardando l'anteprima."""
-    errori = []
-    sx, sy = OFF + SAFE, OFF + SAFE
-    dx, dy = OFF + TRIM_W - SAFE, OFF + TRIM_H - SAFE
-    for pag, nome, x0, y0, x1, y1 in BOX:
-        if x0 < sx - .01 or x1 > dx + .01 or y0 < sy - .01 or y1 > dy + .01:
-            errori.append("%s/%s esce dall'area di sicurezza" % (pag, nome))
+    """Si controlla con i numeri, non guardando l'anteprima."""
+    err = []
+    for testo, corpo in CORPI:
+        if corpo < MINIMO - .01:
+            err.append("corpo %.1f pt sotto il minimo leggibile — '%s'" % (corpo, testo))
+    for nome, x0, y0, x1, y1 in BOX:
+        if x0 < L - .01 or x1 > R + .01 or y0 < B - .01 or y1 > T + .01:
+            err.append("'%s' esce dall'area di sicurezza" % nome)
     for i in range(len(BOX)):
         for j in range(i + 1, len(BOX)):
             a, b = BOX[i], BOX[j]
-            if a[0] != b[0]:
-                continue
-            if a[2] < b[4] - .01 and b[2] < a[4] - .01 and a[3] < b[5] - .01 and b[3] < a[5] - .01:
-                errori.append("%s: '%s' e '%s' si sovrappongono" % (a[0], a[1], b[1]))
-    return errori
+            if a[1] < b[3] - .01 and b[1] < a[3] - .01:          # stessa colonna
+                if a[2] < b[4] - .01 and b[2] < a[4] - .01:
+                    err.append("'%s' e '%s' si sovrappongono" % (a[0], b[0]))
+                else:
+                    # non basta non toccarsi: sotto i 2 mm il biglietto sembra
+                    # affollato anche se tecnicamente e' corretto
+                    stacco = max(a[2], b[2]) - min(a[4], b[4])
+                    if stacco < ARIA - .01:
+                        err.append("'%s' e '%s' distano %.1f mm, meno dei %.1f minimi"
+                                   % (a[0], b[0], stacco / mm, ARIA / mm))
+    return err
 
 
-def tracking(c, x, y, text, font, size, color, track, align="left"):
-    """Testo spaziato a mano: le etichette minute reggono solo se respirano."""
-    c.setFont(font, size)
-    widths = [c.stringWidth(ch, font, size) for ch in text]
-    total = sum(widths) + track * (len(text) - 1)
-    if align == "right":
-        x -= total
-    elif align == "center":
-        x -= total / 2
-    c.setFillColor(color)
-    for ch, w in zip(text, widths):
+def tracking(c, x, y, testo, font, corpo, colore, track):
+    """Le etichette in maiuscolo reggono solo se respirano."""
+    w = larghezza(testo, font, corpo, track)
+    c.setFont(font, corpo)
+    c.setFillColor(colore)
+    for ch in testo:
         c.drawString(x, y, ch)
-        x += w + track
-    return total
+        x += pdfmetrics.stringWidth(ch, font, corpo) + track
+    return w
 
 
-def fit_font(c, text, font, target_w, lo=6, hi=200):
-    """Corpo massimo che tiene il testo entro target_w. Binaria, non a occhio."""
-    for _ in range(60):
-        mid = (lo + hi) / 2
-        if c.stringWidth(text, font, mid) <= target_w:
-            lo = mid
-        else:
-            hi = mid
-    return lo
-
-
-def marchio(c, x, y, s, fondo=ARANCIO, segno=ANTRACITE):
-    """Il marchio del sito: quadrato arrotondato, triangolo pieno. Stesse
-    proporzioni dell'SVG (viewBox 32), asse Y ribaltato per il PDF."""
-    c.saveState()
-    c.setFillColor(fondo)
+def marchio(c, x, y, s):
+    """Il marchio del sito: stesse proporzioni dell'SVG (viewBox 32),
+    asse Y ribaltato per il PDF."""
+    c.setFillColor(ARANCIO)
     c.roundRect(x, y, s, s, s * 7 / 32.0, stroke=0, fill=1)
     u = s / 32.0
     p = c.beginPath()
@@ -118,33 +137,18 @@ def marchio(c, x, y, s, fondo=ARANCIO, segno=ANTRACITE):
     p.lineTo(x + 16.0 * u, y + 22.9 * u)
     p.lineTo(x + 23.5 * u, y + 9.4 * u)
     p.close()
-    c.setFillColor(segno)
+    c.setFillColor(ANTRACITE)
     c.drawPath(p, stroke=0, fill=1)
-    c.restoreState()
 
 
-def tacche(c, x0, y0, x1, y1, colore, lung=2.2 * mm, spess=0.25):
-    """Tacche di registro agli angoli dell'area utile: il tracciato che il
-    muratore non cancella, perche e' la prova che la parete e' a piombo."""
-    c.saveState()
-    c.setStrokeColor(colore)
-    c.setLineWidth(spess)
-    c.setLineCap(0)
-    for x, y, dx, dy in ((x0, y0, 1, 1), (x1, y0, -1, 1), (x0, y1, 1, -1), (x1, y1, -1, -1)):
-        c.line(x, y, x + dx * lung, y)
-        c.line(x, y, x, y + dy * lung)
-    c.restoreState()
-
-
-def qr_vettoriale(c, x, y, lato, dato, scuro=ANTRACITE):
+def qr_vettoriale(c, x, y, lato, dato):
     q = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=1, border=0)
     q.add_data(dato)
     q.make(fit=True)
     m = q.get_matrix()
     n = len(m)
     u = lato / float(n)
-    c.saveState()
-    c.setFillColor(scuro)
+    c.setFillColor(ANTRACITE)
     for r, riga in enumerate(m):
         cc = 0
         while cc < n:
@@ -152,26 +156,16 @@ def qr_vettoriale(c, x, y, lato, dato, scuro=ANTRACITE):
                 run = cc
                 while run < n and riga[run]:
                     run += 1
-                # moduli contigui fusi in un unico rettangolo: niente fessure
-                # bianche fra i pixel quando la stampante interpola
+                # moduli contigui fusi in un rettangolo solo: niente fessure
+                # bianche quando la stampante interpola
                 c.rect(x + cc * u, y + lato - (r + 1) * u, (run - cc) * u, u, stroke=0, fill=1)
                 cc = run
             else:
                 cc += 1
-    c.restoreState()
-    return n
-
-
-def fondo(c, colore):
-    """Il colore arriva fino all'abbondanza e non oltre: cosi' i crocini
-    restano leggibili sulla carta bianca, come vuole la prestampa."""
-    c.setFillColor(colore)
-    c.rect(OFF - BLEED, OFF - BLEED, TRIM_W + 2 * BLEED, TRIM_H + 2 * BLEED, stroke=0, fill=1)
+    return n, u
 
 
 def crocini(c):
-    """Fuori dall'abbondanza: il taglierino sa dove fermarsi."""
-    c.saveState()
     c.setStrokeColor(Color(0, 0, 0))
     c.setLineWidth(0.25)
     lung, stacco = 4 * mm, BLEED
@@ -181,290 +175,106 @@ def crocini(c):
             sy = -1 if y == OFF else 1
             c.line(x, y + sy * stacco, x, y + sy * (stacco + lung))
             c.line(x + sx * stacco, y, x + sx * (stacco + lung), y)
-    c.setFont("Barlow", 4)
-    c.setFillColor(Color(.45, .45, .45))
-    c.restoreState()
 
 
-def slug(c, testo):
-    c.saveState()
-    c.setFont("Barlow", 4)
-    c.setFillColor(Color(.55, .55, .55))
-    c.drawCentredString(PAGE_W / 2, 2.2 * mm, testo)
-    c.restoreState()
+# ------------------------------------------------------------- composizione
 
 
-# ---------------------------------------------------------------- il fronte
+def biglietto(c):
+    # il colore si ferma all'abbondanza: fuori resta carta bianca, e i crocini
+    # restano leggibili
+    c.setFillColor(ANTRACITE)
+    c.rect(OFF - BLEED, OFF - BLEED, TRIM_W + 2 * BLEED, TRIM_H + 2 * BLEED, stroke=0, fill=1)
 
+    # --- la tessera del QR. Su fondo scuro il codice andrebbe invertito, ma non
+    # tutti i lettori reggono l'inversione: meglio aprire un chiaro e dormire
+    # tranquilli, perche' su carta stampata non si torna indietro.
+    tess = 19.5 * mm
+    tx, ty = R - tess, B
+    c.setFillColor(CARTA)
+    c.roundRect(tx, ty, tess, tess, 1.2 * mm, stroke=0, fill=1)
+    pad = 1.8 * mm
+    n, modulo = qr_vettoriale(c, tx + pad, ty + pad, tess - 2 * pad, URL)
+    reg("tessera QR", tx, ty, tx + tess, ty + tess)
 
-def fronte(c):
-    fondo(c, ANTRACITE)
+    # --- fascia alta: marchio e nome per esteso, sulla stessa linea di base
+    s = 8.4 * mm
+    marchio(c, L, T - s, s)
+    reg("marchio", L, T - s, L + s, T)
 
-    L = OFF + SAFE                     # colonna sinistra
-    R = OFF + TRIM_W - SAFE            # colonna destra
-    B = OFF + SAFE                     # piede dell'area utile
-    T = OFF + TRIM_H - SAFE            # cielo dell'area utile
-    larg = R - L
-
-    tacche(c, L, B, R, T, HexColor("#2C2F33"))
-
-    # --- fascia alta: marchio a sinistra, territorio a destra, stessa linea ottica
-    s = 7.4 * mm
-    y_mark = T - s
-    marchio(c, L, y_mark, s)
-    y_terr = y_mark + s / 2 - 1.0 * mm
-    w_terr = tracking(c, R, y_terr, "MILANO E PROVINCIA",
-                      "Barlow-SB", 5.0, FUMO, 1.15, align="right")
-    reg("fronte", "territorio", R - w_terr, y_terr, R, y_terr + 5.0 * .73)
-
-    # --- la voce alta: una parola sola. Il corpo nasce dall'altezza voluta,
-    # non dalla larghezza disponibile: e' l'altezza a governare il respiro.
-    CAP = 0.727                                   # rapporto maiuscola/em di Anton
-    alt_voluta = 10.4 * mm
-    corpo = min(alt_voluta / CAP, fit_font(c, "GABRIEL", "Anton", larg))
-    alt = corpo * CAP
-    base = B + 17.4 * mm
-    c.setFont("Anton", corpo)
-    c.setFillColor(HexColor("#FFFFFF"))
-    c.drawString(L, base, "GABRIEL")
-    reg("fronte", "marchio", L, y_mark, L + s, y_mark + s)
-    reg("fronte", "wordmark", L, base, L + c.stringWidth("GABRIEL", "Anton", corpo), base + alt)
+    x_nome = L + s + 3.4 * mm
+    y_nome = T - s + 1.4 * mm
+    c.setFont("Anton", C_NOME)
+    c.setFillColor(CHIARO)
+    c.drawString(x_nome, y_nome, NOME)
+    reg("nome", x_nome, y_nome, x_nome + larghezza(NOME, "Anton", C_NOME),
+        y_nome + C_NOME * CAP)
 
     # --- il tracciato: un filetto e basta. L'arancio non riempie mai.
-    y_linea = base - 4.0 * mm
+    y_linea = T - 13.2 * mm
     c.setStrokeColor(ARANCIO)
-    c.setLineWidth(0.6)
+    c.setLineWidth(0.7)
     c.line(L, y_linea, R, y_linea)
 
-    y_claim = y_linea - 3.5 * mm
-    w_claim = tracking(c, L, y_claim, "TUTTOFARE PER LA CASA", "Barlow-SB", 5.4, ARANCIO, 1.45)
-    reg("fronte", "claim", L, y_claim, L + w_claim, y_claim + 5.4 * .73)
+    # --- il mestiere, e sotto in che cosa consiste
+    y_ruolo = y_linea - 4.2 * mm
+    w = tracking(c, L, y_ruolo, RUOLO, "Barlow-SB", C_RUOLO, ARANCIO, 1.5)
+    reg("ruolo", L, y_ruolo, L + w, y_ruolo + C_RUOLO * .73)
 
-    # --- il numero: chi trova il biglietto sul bancone non deve girarlo
-    c_tel = 14.0
-    c.setFont("Anton", c_tel)
-    c.setFillColor(HexColor("#FFFFFF"))
-    c.drawString(L, B + 0.4 * mm, TEL)
-    reg("fronte", "telefono", L, B + 0.4 * mm, L + c.stringWidth(TEL, "Anton", c_tel),
-        B + 0.4 * mm + c_tel * CAP)
-
-    # --- etichetta WhatsApp, appesa al filetto che la sottolinea
-    et = "ANCHE WHATSAPP"
-    y_et = B + 2.0 * mm
-    w = tracking(c, R, y_et, et, "Barlow-SB", 5.0, FUMO, 1.15, align="right")
-    c.setStrokeColor(HexColor("#3A3E42"))
-    c.setLineWidth(0.4)
-    c.line(R - w, y_et - 1.6 * mm, R, y_et - 1.6 * mm)
-    reg("fronte", "whatsapp", R - w, y_et - 1.6 * mm, R, y_et + 1.4 * mm)
-
-    crocini(c)
-    slug(c, "GABRIEL CALASI  ·  fronte  ·  85 x 55 mm  ·  abbondanza 3 mm")
-    c.showPage()
-
-
-# ----------------------------------------------------------------- il retro
-
-
-def retro(c):
-    fondo(c, CARTA)
-
-    L = OFF + SAFE
-    R = OFF + TRIM_W - SAFE
-    T = OFF + TRIM_H - SAFE
-
-    tacche(c, L, OFF + SAFE, R, T, HexColor("#D8D3C9"))
-
-    B = OFF + SAFE
-
-    # QR in alto a destra: scuro su chiaro, il solo verso che legge sempre
-    lato = 18.6 * mm
-    qx, qy = R - lato, T - lato
-    n = qr_vettoriale(c, qx, qy, lato, URL)
-    reg("retro", "qr", qx, qy, qx + lato, qy + lato)
-
-    # colonna sinistra: chi e', e cosa fa. Larghezza chiusa dal QR.
-    col = qx - L - 5 * mm
-    c.setFont("Anton", 10.6)
-    c.setFillColor(ANTRACITE)
-    y_nome = T - 3.4 * mm
-    c.drawString(L, y_nome, "GABRIEL CALASI")
-    reg("retro", "nome", L, y_nome, L + c.stringWidth("GABRIEL CALASI", "Anton", 10.6),
-        y_nome + 10.6 * .727)
-
-    y_mest = T - 7.3 * mm
-    w_mest = tracking(c, L, y_mest, "IDRAULICO  ·  MURATORE", "Barlow-SB", 5.3, ARANCIO, 1.35)
-    reg("retro", "mestiere", L, y_mest, L + w_mest, y_mest + 5.3 * .73)
-
-    voci = ["Idraulica, caldaie e condizionatori",
-            "Bagni e ristrutturazioni",
-            "Muratura e cartongesso",
-            "Piastrelle e pavimenti",
-            "Riparazioni e tinteggiatura"]
-    c.setFont("Barlow", 6.4)
-    c.setFillColor(MATITA)
-    y = T - 12.4 * mm
-    w_voci = max(c.stringWidth(v, "Barlow", 6.4) for v in voci)
-    for v in voci:
-        c.drawString(L, y, v)
-        y -= 3.15 * mm
-    reg("retro", "servizi", L, y + 3.15 * mm - 1.4, L + w_voci, T - 12.4 * mm + 6.4 * .73)
-
-    # sotto il QR, l'indirizzo in chiaro: il codice non e' l'unica via d'accesso
-    y_sito = qy - 3.1 * mm
-    tracking(c, qx + lato, y_sito, "IL SITO", "Barlow-SB", 4.7, ARANCIO, 1.2, align="right")
-    c.setFont("Barlow", 5.0)
-    c.setFillColor(MATITA)
-    c.drawRightString(qx + lato, qy - 6.1 * mm, SITO)
-    reg("retro", "indirizzo", qx + lato - c.stringWidth(SITO, "Barlow", 5.0),
-        qy - 6.1 * mm - 1.2, qx + lato, y_sito + 4.7 * .73)
-
-    # la fascia centrale non e' un avanzo: ci sta la frase che regge il sito
-    y_frase = B + 11.0 * mm
-    c.setFont("Barlow", 7.4)
-    c.setFillColor(ANTRACITE)
-    frase = "Un solo professionista per tutta la casa."
-    c.drawString(L, y_frase, frase)
-    reg("retro", "frase", L, y_frase - 1.3, L + c.stringWidth(frase, "Barlow", 7.4),
-        y_frase + 7.4 * .73)
-
-    # piede: il filetto regge la promessa commerciale
-    y_linea = B + 5.6 * mm
-    c.setStrokeColor(HexColor("#D8D3C9"))
-    c.setLineWidth(0.5)
-    c.line(L, y_linea, R, y_linea)
-
-    c.setFont("Barlow-SB", 7.6)
-    c.setFillColor(ANTRACITE)
-    c.drawString(L, B + 1.0 * mm, TEL)
-    reg("retro", "telefono", L, B + 1.0 * mm - 1.2,
-        L + c.stringWidth(TEL, "Barlow-SB", 7.6), B + 1.0 * mm + 7.6 * .73)
-
-    y_prom = B + 1.35 * mm
-    w_prom = tracking(c, R, y_prom, "SOPRALLUOGO E PREVENTIVO GRATUITI",
-                      "Barlow", 4.9, MATITA, 0.85, align="right")
-    reg("retro", "promessa", R - w_prom, y_prom, R, y_prom + 4.9 * .73)
-
-    crocini(c)
-    slug(c, "GABRIEL CALASI  ·  retro  ·  85 x 55 mm  ·  abbondanza 3 mm")
-    c.showPage()
-
-
-# ------------------------------------------------------------ il lato unico
-
-
-def lato_unico(c):
-    """Un solo lato non e' il fronte col retro buttato via: e' una terza
-    composizione, dove QR e contatti devono rientrare davanti senza che
-    la voce alta perda il suo respiro."""
-    fondo(c, ANTRACITE)
-
-    L, R = OFF + SAFE, OFF + TRIM_W - SAFE
-    B, T = OFF + SAFE, OFF + TRIM_H - SAFE
-    CAP = 0.727
-
-    tacche(c, L, B, R, T, HexColor("#2C2F33"))
-
-    # --- il QR vuole il suo chiaro: su fondo scuro si apre una tessera di carta.
-    # Invertirlo costerebbe meno spazio ma non tutti i lettori lo reggono, e un
-    # codice che non legge manda al macero l'intera tiratura.
-    lap = 22.0 * mm
-    px, py = R - lap, T - lap
-    c.setFillColor(CARTA)
-    c.roundRect(px, py, lap, lap, 1.2 * mm, stroke=0, fill=1)
-    pad = 2.0 * mm
-    qr_vettoriale(c, px + pad, py + pad, lap - 2 * pad, URL)
-    reg("solo", "tessera-qr", px, py, px + lap, py + lap)
-
-    # --- fascia alta: il marchio, e accanto il territorio. La destra e' occupata.
-    s = 7.2 * mm
-    y_mark = T - s
-    marchio(c, L, y_mark, s)
-    reg("solo", "marchio", L, y_mark, L + s, y_mark + s)
-    x_terr = L + s + 3.0 * mm
-    y_terr = y_mark + s / 2 - 1.0 * mm
-    w_terr = tracking(c, x_terr, y_terr, "MILANO E PROVINCIA", "Barlow-SB", 5.0, FUMO, 1.15)
-    reg("solo", "territorio", x_terr, y_terr, x_terr + w_terr, y_terr + 5.0 * .73)
-
-    # --- la voce alta, contenuta dalla tessera: l'altezza governa, la
-    # larghezza disponibile fa solo da tetto
-    corpo = min(8.8 * mm / CAP, fit_font(c, "GABRIEL", "Anton", px - L - 5.0 * mm))
-    base = B + 24.0 * mm
-    c.setFont("Anton", corpo)
-    c.setFillColor(HexColor("#FFFFFF"))
-    c.drawString(L, base, "GABRIEL")
-    reg("solo", "wordmark", L, base, L + c.stringWidth("GABRIEL", "Anton", corpo),
-        base + corpo * CAP)
-
-    # --- il tracciato passa sotto la tessera e tiene insieme i due blocchi
-    y_linea = B + 20.0 * mm
-    c.setStrokeColor(ARANCIO)
-    c.setLineWidth(0.6)
-    c.line(L, y_linea, R, y_linea)
-
-    y_claim = y_linea - 3.6 * mm
-    w_claim = tracking(c, L, y_claim, "TUTTOFARE PER LA CASA", "Barlow-SB", 5.3, ARANCIO, 1.45)
-    reg("solo", "claim", L, y_claim, L + w_claim, y_claim + 5.3 * .73)
-
-    # --- l'indirizzo in chiaro sotto la tessera: il codice non e' l'unica via
-    tracking(c, R, y_claim, "IL SITO", "Barlow-SB", 4.7, ARANCIO, 1.2, align="right")
-    y_sito = y_claim - 3.1 * mm
-    c.setFont("Barlow", 5.1)
+    y_lav = y_ruolo - 4.8 * mm
+    c.setFont("Barlow", C_LAVORI)
     c.setFillColor(FUMO)
-    c.drawRightString(R, y_sito, SITO)
-    reg("solo", "indirizzo", R - c.stringWidth(SITO, "Barlow", 5.1), y_sito - 1.2,
-        R, y_claim + 4.7 * .73)
+    interlinea = 3.7 * mm
+    for i, riga in enumerate(LAVORI):
+        c.drawString(L, y_lav - i * interlinea, riga)
+    # le righe di uno stesso paragrafo sono un blocco solo: fra loro vale
+    # l'interlinea, non lo stacco fra blocchi
+    reg("lavori", L, y_lav - (len(LAVORI) - 1) * interlinea - 1.7,
+        L + max(larghezza(r, "Barlow", C_LAVORI) for r in LAVORI),
+        y_lav + C_LAVORI * .73)
 
-    # --- i mestieri, in due righe: l'elenco lungo del retro qui non ci sta
-    voci = ["Idraulica, caldaie e condizionatori",
-            "Bagni, muratura, piastrelle, riparazioni"]
-    c.setFont("Barlow", 5.9)
+    # --- il numero: l'unica cosa che deve leggersi da lontano
+    y_tel = B + 9.6 * mm
+    c.setFont("Anton", C_TEL)
+    c.setFillColor(CHIARO)
+    c.drawString(L, y_tel, TEL)
+    reg("telefono", L, y_tel, L + larghezza(TEL, "Anton", C_TEL), y_tel + C_TEL * CAP)
+
+    # --- zona e indirizzo, appoggiati al piede
+    y_zona = B + 5.0 * mm
+    w = tracking(c, L, y_zona, ZONA, "Barlow-SB", C_ZONA, FUMO, 1.1)
+    reg("zona", L, y_zona, L + w, y_zona + C_ZONA * .73)
+
+    y_sito = B + 0.8 * mm
+    c.setFont("Barlow", C_SITO)
     c.setFillColor(FUMO)
-    y = B + 10.2 * mm
-    for v in voci:
-        c.drawString(L, y, v)
-        y -= 3.2 * mm
-    reg("solo", "servizi", L, y + 3.2 * mm - 1.2,
-        L + max(c.stringWidth(v, "Barlow", 5.9) for v in voci), B + 10.2 * mm + 5.9 * .73)
-
-    # --- il numero, l'unica cosa che deve leggersi da un metro
-    c_tel = 14.0
-    c.setFont("Anton", c_tel)
-    c.setFillColor(HexColor("#FFFFFF"))
-    c.drawString(L, B + 0.4 * mm, TEL)
-    reg("solo", "telefono", L, B + 0.4 * mm, L + c.stringWidth(TEL, "Anton", c_tel),
-        B + 0.4 * mm + c_tel * CAP)
-
-    et, y_et = "ANCHE WHATSAPP", B + 2.0 * mm
-    w = tracking(c, R, y_et, et, "Barlow-SB", 5.0, FUMO, 1.15, align="right")
-    c.setStrokeColor(HexColor("#3A3E42"))
-    c.setLineWidth(0.4)
-    c.line(R - w, y_et - 1.6 * mm, R, y_et - 1.6 * mm)
-    reg("solo", "whatsapp", R - w, y_et - 1.6 * mm, R, y_et + 1.4 * mm)
+    c.drawString(L, y_sito, SITO)
+    reg("sito", L, y_sito - 1.5, L + larghezza(SITO, "Barlow", C_SITO),
+        y_sito + C_SITO * .73)
 
     crocini(c)
-    slug(c, "GABRIEL CALASI  ·  lato unico  ·  85 x 55 mm  ·  abbondanza 3 mm")
+    c.setFont("Barlow", 4.5)
+    c.setFillColor(Color(.55, .55, .55))
+    c.drawCentredString(PAGE_W / 2, 2.2 * mm,
+                        "GABRIEL CALASI  ·  85 x 55 mm  ·  abbondanza 3 mm  ·  lato unico")
     c.showPage()
+    return n, modulo
 
 
-# ------------------------------------------------------------------ stampa
+c = rl_canvas.Canvas(OUT, pagesize=(PAGE_W, PAGE_H))
+c.setTitle("Gabriel Calasi - biglietto da visita")
+c.setAuthor("Gabriel Calasi")
+c.setSubject("85x55 mm, lato unico, abbondanza 3 mm")
+n, modulo = biglietto(c)
 
+errori = verifica()
+for e in errori:
+    print("ERRORE:", e)
+if errori:
+    sys.exit(1)
 
-def documento(percorso, pagine, sottotitolo):
-    del BOX[:]
-    c = rl_canvas.Canvas(percorso, pagesize=(PAGE_W, PAGE_H))
-    c.setTitle("Gabriel Calasi - biglietto da visita")
-    c.setAuthor("Gabriel Calasi")
-    c.setSubject("85x55 mm, %s, abbondanza 3 mm" % sottotitolo)
-    for p in pagine:
-        p(c)
-    errori = verifica()
-    for e in errori:
-        print("ERRORE:", e)
-    if errori:
-        sys.exit(1)
-    c.save()
-    print("scritto: %-46s %2d elementi, nessuna collisione" % (percorso, len(BOX)))
-
-
-documento(os.path.join(OUT, "gabriel-biglietto-stampa.pdf"), [fronte, retro], "fronte/retro")
-documento(os.path.join(OUT, "gabriel-biglietto-1lato-stampa.pdf"), [lato_unico], "lato unico")
+c.save()
+print("scritto: %s" % OUT)
+print("  %d elementi | nessuna collisione, nessuno sconfinamento" % len(BOX))
+print("  corpo minimo %.1f pt | QR %d x %d moduli da %.2f mm"
+      % (min(cp for _, cp in CORPI), n, n, modulo / mm))
