@@ -55,7 +55,7 @@ CARTA     = HexColor("#F3F0E9")
 CHIARO    = HexColor("#FFFFFF")
 FUMO      = HexColor("#A7ACB1")   # secondario sul fondo scuro
 MATITA    = HexColor("#6B6660")   # secondario sulla carta
-FILETTO   = HexColor("#CFC9BE")   # la riga di separazione, sulla carta
+FILETTO   = HexColor("#B5AC9D")   # separatore: al 16%% di contrasto spariva in stampa
 
 # ---------------------------------------------------------------- geometria
 TRIM_W, TRIM_H = 85 * mm, 55 * mm
@@ -218,13 +218,20 @@ def scuro(c):
     # la tessera del QR. Su fondo scuro il codice andrebbe invertito, ma non
     # tutti i lettori reggono l'inversione: meglio aprire un chiaro, perche'
     # su carta stampata non si torna indietro.
-    tess = 19.5 * mm
+    tess, alta = 19.5 * mm, 23.4 * mm
     tx, ty = R - tess, B
     c.setFillColor(CARTA)
-    c.roundRect(tx, ty, tess, tess, 1.2 * mm, stroke=0, fill=1)
+    c.roundRect(tx, ty, tess, alta, 1.2 * mm, stroke=0, fill=1)
     pad = 1.8 * mm
-    n, modulo = qr_vettoriale(c, tx + pad, ty + pad, tess - 2 * pad, URL)
-    reg("tessera QR", tx, ty, tx + tess, ty + tess)
+    n, modulo = qr_vettoriale(c, tx + pad, ty + alta - pad - (tess - 2 * pad),
+                              tess - 2 * pad, URL)
+    # la didascalia sta dentro la tessera, sotto il codice: sul fondo scuro
+    # non avrebbe spazio sotto, e staccata dal chiaro sembrerebbe un avanzo
+    c.setFont("Barlow-SB", 7.8)
+    c.setFillColor(ANTRACITE)
+    c.drawCentredString(tx + tess / 2, ty + 2.0 * mm, "Il sito")
+    larghezza("Il sito", "Barlow-SB", 7.8)
+    reg("tessera QR", tx, ty, tx + tess, ty + alta)
 
     s = 8.4 * mm
     marchio(c, L, T - s, s)
@@ -254,21 +261,15 @@ def scuro(c):
     reg("lavori", L, y_lav - (len(LAVORI) - 1) * interlinea - 1.7,
         L + max(larghezza(r, "Barlow", 8.0) for r in LAVORI), y_lav + 8.0 * CAP_BARLOW)
 
-    y_tel = B + 9.6 * mm
+    y_tel = B + 8.0 * mm
     c.setFont("Anton", 25.0)
     c.setFillColor(CHIARO)
     c.drawString(L, y_tel, TEL)
     reg("telefono", L, y_tel, L + larghezza(TEL, "Anton", 25.0), y_tel + 25.0 * CAP_ANTON)
 
-    y_zona = B + 5.0 * mm
+    y_zona = B + 3.4 * mm
     w = tracking(c, L, y_zona, ZONA.upper(), "Barlow-SB", 8.0, FUMO, 1.1)
     reg("zona", L, y_zona, L + w, y_zona + 8.0 * CAP_BARLOW)
-
-    y_sito = B + 0.8 * mm
-    c.setFont("Barlow", 7.6)
-    c.setFillColor(FUMO)
-    c.drawString(L, y_sito, SITO)
-    reg("sito", L, y_sito - 1.5, L + larghezza(SITO, "Barlow", 7.6), y_sito + 7.6 * CAP_BARLOW)
 
     rifinitura(c, "GABRIEL CALASI  ·  scuro  ·  85 x 55 mm  ·  abbondanza 3 mm")
     c.showPage()
@@ -298,7 +299,16 @@ def sobrio(c):
     lato = 18.5 * mm
     qx, qy = R - lato, T - lato
     n, modulo = qr_vettoriale(c, qx, qy, lato, URL)
-    reg("QR", qx, qy, qx + lato, qy + lato)
+
+    # la didascalia appartiene al codice: sta appesa sotto, e si registra
+    # insieme a lui come un blocco solo. Fra una figura e la sua didascalia
+    # non vale lo stacco che serve fra due blocchi diversi.
+    y_did = qy - 3.0 * mm
+    c.setFont("Barlow-SB", 7.8)
+    c.setFillColor(MATITA)
+    c.drawRightString(R, y_did, "Il sito")
+    larghezza("Il sito", "Barlow-SB", 7.8)
+    reg("QR", qx, y_did - 1.8, qx + lato, qy + lato)
 
     # --- identita': marchio e nome sulla stessa linea, come una firma
     s = 7.2 * mm
@@ -331,35 +341,27 @@ def sobrio(c):
 
     # --- il filetto separa chi sono da come mi trovi. Da margine a margine:
     # e' la riga che tiene insieme i due assi.
-    y_filo = B + 15.4 * mm
+    y_filo = B + 13.0 * mm
     c.setStrokeColor(FILETTO)
     c.setLineWidth(0.5)
     c.line(L, y_filo, R, y_filo)
 
     # --- il numero: qui il peso fa il lavoro che altrove faceva il corpo
-    c_tel = 15.0
-    y_tel = B + 8.4 * mm
+    c_tel = 16.5
+    y_tel = B + 2.8 * mm
     c.setFont("Barlow-B", c_tel)
     c.setFillColor(ANTRACITE)
     c.drawString(L, y_tel, TEL)
     reg("telefono", L, y_tel, L + larghezza(TEL, "Barlow-B", c_tel),
         y_tel + c_tel * CAP_BARLOW)
 
-    # --- il piede tiene i due assi: la zona parte da sinistra, l'indirizzo
-    # arriva a destra. Il QR sopra e l'indirizzo sotto reggono il margine
-    # destro, che altrimenti resterebbe un bordo vuoto.
-    y_piede = B + 1.4 * mm
+    # --- numero e zona sulla stessa linea di base, da un margine all'altro:
+    # senza piu' l'indirizzo scritto e' questa riga a reggere i due assi
     c.setFont("Barlow-SB", 8.0)
-    c.setFillColor(ANTRACITE)
-    c.drawString(L, y_piede, ZONA)
-    reg("zona", L, y_piede - 1.8, L + larghezza(ZONA, "Barlow-SB", 8.0),
-        y_piede + 8.0 * CAP_BARLOW)
-
-    c.setFont("Barlow", 8.0)
     c.setFillColor(MATITA)
-    c.drawRightString(R, y_piede, SITO)
-    reg("indirizzo", R - larghezza(SITO, "Barlow", 8.0), y_piede - 1.8, R,
-        y_piede + 8.0 * CAP_BARLOW)
+    c.drawRightString(R, y_tel, ZONA)
+    reg("zona", R - larghezza(ZONA, "Barlow-SB", 8.0), y_tel - 1.8, R,
+        y_tel + 8.0 * CAP_BARLOW)
 
     rifinitura(c, "GABRIEL CALASI  ·  sobrio  ·  85 x 55 mm  ·  abbondanza 3 mm")
     c.showPage()
