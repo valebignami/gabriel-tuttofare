@@ -85,7 +85,7 @@ def larghezza(testo, font, corpo, track=0.0):
     return pdfmetrics.stringWidth(testo, font, corpo) + track * (len(testo) - 1)
 
 
-def verifica(L, R, B, T, minimo=MINIMO, aria=ARIA):
+def verifica(L, R, B, T, minimo=MINIMO, aria=ARIA, ammesse=()):
     """Si controlla con i numeri, non guardando l'anteprima."""
     err = []
     for testo, corpo in CORPI:
@@ -94,9 +94,14 @@ def verifica(L, R, B, T, minimo=MINIMO, aria=ARIA):
     for nome, x0, y0, x1, y1 in BOX:
         if x0 < L - .01 or x1 > R + .01 or y0 < B - .01 or y1 > T + .01:
             err.append("'%s' esce dall'area di sicurezza" % nome)
+    # certe sovrapposizioni sono il progetto, non un errore: vanno dichiarate
+    # una per una, cosi' restano una scelta e non una deroga generale
+    ammesse = set(frozenset(coppia) for coppia in ammesse)
     for i in range(len(BOX)):
         for j in range(i + 1, len(BOX)):
             a, b = BOX[i], BOX[j]
+            if frozenset((a[0], b[0])) in ammesse:
+                continue
             if a[1] < b[3] - .01 and b[1] < a[3] - .01:          # stessa colonna
                 if a[2] < b[4] - .01 and b[2] < a[4] - .01:
                     err.append("'%s' e '%s' si sovrappongono" % (a[0], b[0]))
